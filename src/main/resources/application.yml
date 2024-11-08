@@ -1,0 +1,61 @@
+server:
+  port: 8000
+
+spring:
+  config:
+    activate:
+      on-profile: default
+  application:
+    name: web-apigateway
+  cloud:
+    gateway:
+      default-filter:
+        - name: GlobalFilter
+          args:
+            baseMessage: Spring Cloud Gateway Global Filter
+            preLogger: true
+            postLogger: true
+      routes:
+        - id: auth
+          uri : http://localhost:8001
+          predicates:
+            - Path=/auth/**
+            - Method=GET,POST
+          filters:
+            - RemoveRequestHeader=Cookie # 쿠키 제거
+            - RewritePath=/auth/(?<segment>.*), /$\{segment}
+        - id: auth
+          uri : http://localhost:8001
+          predicates:
+            - Path=/auth/api/auth/logout
+            - Method=GET
+          filters:
+            - RemoveRequestHeader=Cookie
+            - StripPrefix=1
+            - AuthorizationHeaderFilter
+        - id: auth
+          uri : http://localhost:8001
+          predicates:
+              - Path=/auth/**
+          filters:
+              - RemoveRequestHeader=Cookie
+              - RewritePath=/auth/(?<segment>.*), /$\{segment}
+              - CustomFilter
+        - id: core
+          uri: http://localhost:8005
+          predicates:
+              - Path=/core/**
+          filters:
+            - RemoveRequestHeader=Cookie
+            - StripPrefix=1
+            - AuthorizationHeaderFilter
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: refresh, health, beans, httpexchanges, busrefresh, info, metrics, prometheus
+
+auth-service-url: "http://localhost:8001"
+core-service-url: "http://localhost:8005"

@@ -23,13 +23,13 @@ import java.util.Objects;
 // Request Header에 관한 것을 Filter로 처리
 public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<AuthorizationHeaderFilter.Config> {
 
-    private final WebClient.Builder authClientBuilder;
+    private final WebClient authClient;
     Environment env;
 
-    public AuthorizationHeaderFilter(WebClient.Builder authClientBuilder,
+    public AuthorizationHeaderFilter(WebClient authClient,
                                      Environment env) {
         super(Config.class);
-        this.authClientBuilder = authClientBuilder.baseUrl(Objects.requireNonNull(env.getProperty("auth-service-url")));;
+        this.authClient = authClient;
         this.env = env;
     }
 
@@ -43,7 +43,7 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
     @Override
     public GatewayFilter apply(Config config) {
         return (exchange, chain) -> {
-            ServerHttpRequest request = (ServerHttpRequest) exchange.getRequest();
+            ServerHttpRequest request = exchange.getRequest();
             log.info("Authorization Filter baseMessage: {}, {}", config.getBaseMessage(), request.getRemoteAddress());
 
             String requestPath = request.getURI().getPath(); // 요청 경로를 가져옴
@@ -52,7 +52,7 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
                 return chain.filter(exchange); // 포함되어 있으면 다음 필터로 이동
             }
 
-            //Authorization 헤더 가져오기
+            //Authorization 헤더 가져오기 (Access Token을 의미한다.)
             String authHeader = request.getHeaders().getFirst(Constants.ACCESS_TOKEN_HEADER);
             if(authHeader == null) {
                 exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
@@ -68,11 +68,6 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
     //GatewayFilterChain : GatewayFilter의 체인을 나타내며, GatewayFilter를 순차적으로 실행하고, 다음 필터를 호출하는 역할을 한다.
     //Mono : 단일 결과를 반환하는 비동기 작업에 시행된다. 최대 1개의 항목만을 다룬다.
     public Mono<Void> authenticateAndFilter(ServerWebExchange exchange, GatewayFilterChain chain, String authHeader){
-        String token = authHeader.substring("Bearer ".length());
-
-        WebClient authClient = authClientBuilder.clone()
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build();
 
         return authClient
                 .method(HttpMethod.GET)
@@ -86,8 +81,8 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
                     log.info("Final Headers: {}", httpHeaders);
                 })
                 .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .onStatus(HttpStatusCode::is4xxClientError,
+                .retrieve() // 위에 세팅한 Http 요청을 전송한다.
+                .onStatus(HttpStatusCode::is4xxClientError, // 요청의 결과가 4xx 에러 코드라면
                         clientResponse -> clientResponse.bodyToMono(String.class)
                                 .flatMap(body -> {
                                     log.error("Client error: status = {}, body = {}", clientResponse.statusCode(), body);
@@ -95,7 +90,7 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
                                     return Mono.error(new CustomClientErrorException(status, "Authentication failed: " + body));
                                 })
                 )
-                .onStatus(HttpStatusCode::is5xxServerError,
+                .onStatus(HttpStatusCode::is5xxServerError, // 요청의 결과가 5xx 에러 코드라면
                         clientResponse -> clientResponse.bodyToMono(String.class)
                                 .flatMap(body -> {
                                     log.error("Server error: status = {}, body = {}", clientResponse.statusCode(), body);
@@ -109,10 +104,12 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
 
     // 응답 가공
     private Mono<Void> handleResponse(ServerWebExchange exchange, GatewayFilterChain chain, ResponseEntity<Void> responseEntity){
+        // Auth로부터 온 응답에서 Username 헤더를 추출한다.
         List<String> usernameHeaders = responseEntity.getHeaders().get(Constants.X_AUTHENTICATED_USERNAME_HEADER);
 
+        // 헤더가 없다면, 인증에 성공하지 못한 것 이기 때문에, 401 에러를 반환한다.
         if (usernameHeaders == null || usernameHeaders.isEmpty()) {
-            return Mono.error(new CustomClientErrorException(HttpStatus.CONFLICT, "Missing authentication headers"));
+            return Mono.error(new CustomClientErrorException(HttpStatus.UNAUTHORIZED, "Missing authentication headers"));
         }
         String username = usernameHeaders.get(0);
 
@@ -126,7 +123,7 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
 
         headers.add(Constants.X_AUTHENTICATED_USERNAME_HEADER, username);
 
-        return (ServerHttpRequest) exchange.getRequest().mutate()
+        return exchange.getRequest().mutate()
                 .headers(httpHeaders -> httpHeaders.addAll(headers))
                 .build();
     }

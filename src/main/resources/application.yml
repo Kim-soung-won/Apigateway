@@ -50,12 +50,61 @@ spring:
             - StripPrefix=1
             - AuthorizationHeaderFilter
 
-
 management:
   endpoints:
     web:
       exposure:
-        include: refresh, health, beans, httpexchanges, busrefresh, info, metrics, prometheus
+        include: '*'
+  endpoint:
+    health:
+      show-details: always
+
+  health:
+    diskspace:
+      enabled: false
+    circuitbreakers:
+      enabled: true
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        resilience4j.circuitbreaker.calls: true
+
+# Resilience4j
+resilience4j.retry:
+  configs:
+    default:
+      maxAttempts: 3
+      waitDuration: 1000
+      retryExceptions:
+        - com.web.apigateway.exception.RecordException
+  instances:
+    simpleRetryConfig:
+      baseConfig: default
+
+resilience4j.circuitbreaker:
+  configs:
+    default:
+      registerHealthIndicator: true # 기본 헬스체크 엔드포인트 등록
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 7 # 최소 7번까지 CLOSE로 가정하고 호출
+      slidingWindowSize: 10 # 10개의 요청을 기준으로 판단
+      waitDurationInOpenState: 10s # 10초 뒤에 OPEN 상태에서 HALF_OPEN으로
+      failureRateThreshold: 40 # slidingWindowSize 중 40%가 recordException이면 OPEN
+      slowCallDurationThreshold: 3000 # 3초 동안 요청이 처리되지 않으면 실패로 간주
+      slowCallRateThreshold: 60 # slidingWindowSize 중 60%가 slowCall이면 OPEN
+      permittedNumberOfCallsInHalfOpenState: 5 # ALF_OPEN 상태에서 5번까지 CLOSE로 변경하기 위한 호출
+      automaticTransitionFromOpenToHalfOpenEnabled: true # OPEN 상태에서 자동으로 HALF_OPEN으로 변경
+      eventConsumerBufferSize: 10 # actuator를 위한 이벤트 버퍼 사이즈
+      recordExceptions:
+        - com.web.apigateway.exception.RecordException
+  instances:
+    AuthService:
+      baseConfig: default
+
 
 auth-service-url: "http://localhost:8001"
 core-service-url: "http://localhost:8005"

@@ -55,6 +55,18 @@ dependencies {
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+
+    //     Spring Cloud 마이크로서비스 관련
+    implementation 'org.springframework.cloud:spring-cloud-starter-bootstrap' // 부트스트랩 설정
+//    implementation 'org.springframework.cloud:spring-cloud-starter-config'
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j' // Resilience4j를 이용한 서킷 브레이커
+
+    // Circuit Breaker
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator' // Actuator를 이용한 애플리케이션 모니터링
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-all:2.2.0'
 }
 
 dependencyManagement {

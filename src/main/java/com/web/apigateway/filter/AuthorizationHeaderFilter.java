@@ -106,13 +106,13 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
                                 })
                 )
                 .toBodilessEntity()
-                .onErrorResume(WebClientRequestException.class, e ->{
-                    String errorMessage = circuitBreakerService.authClientError("인증 서버 연결 실패");
-                    return Mono.error(new RecordException("Server Error: " + errorMessage));
-                })
                 .onErrorResume(ConnectException.class, e -> {
-                    String errorMessage = circuitBreakerService.authClientError("인증 서버 연결 실패");
-                    return Mono.error(new RecordException("Server Error: " + errorMessage));
+                    String errorMessage = circuitBreakerService.authClientError("인증 서버 연결 실패로 인한 인증 실패");
+                    return Mono.error(new ConnectException("Server Error: " + errorMessage));
+                })
+                .onErrorResume(WebClientRequestException.class, e ->{
+                    String errorMessage = circuitBreakerService.authClientError("인증 서버 연결 실패로 인한 인증 실패");
+                    return Mono.error(new ConnectException("Server Error: " + errorMessage));
                 })
                 .flatMap(responseEntity -> handleResponse(exchange, chain, responseEntity))
                 .onErrorResume(e -> handleError(exchange, e));
@@ -149,8 +149,8 @@ public class AuthorizationHeaderFilter extends AbstractGatewayFilterFactory<Auth
             HttpStatus status = ((CustomClientErrorException) e).getStatus();
             log.error("Error status: {}", status);
             exchange.getResponse().setStatusCode(status);
-        } else if(e instanceof RecordException){
-            exchange.getResponse().setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
+        } else if(e instanceof ConnectException){
+            exchange.getResponse().setStatusCode(HttpStatus.REQUEST_TIMEOUT);
         } else {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
         }

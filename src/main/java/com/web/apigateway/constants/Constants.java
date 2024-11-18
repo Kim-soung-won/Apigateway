@@ -1,8 +1,19 @@
 package com.web.apigateway.constants;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Constants {
+
+    public static final String CONNECT_ERROR_MESSAGE = "Could not connect to the service Please ask the administrator to check the service status";
+
+    private static final Pattern PATTERN = Pattern.compile("^/([^/]+)/.*$");
+
+    public static String extractFirstPart(String url) {
+        Matcher matcher = PATTERN.matcher(url);
+        return matcher.find() ? matcher.group(1) : null;
+    }
 
     public static final String AUTH_VALIDATE_URL = "/api/auth/validate";
 
